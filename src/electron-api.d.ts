@@ -42,6 +42,7 @@ export interface ProgressData {
 
 export interface MergeResult {
   success: boolean;
+  cancelled?: boolean;
   output_path?: string;
   sample_rate?: number;
   channels?: number;
@@ -49,6 +50,12 @@ export interface MergeResult {
   total_samples?: number;
   tracks_merged?: number;
   error?: string;
+}
+
+export interface CancelResult {
+  success: boolean;
+  killed?: boolean;
+  message?: string;
 }
 
 export interface ElectronAPI {
@@ -59,8 +66,9 @@ export interface ElectronAPI {
   analyzeWaveform: (filePath: string) => Promise<WaveformData>;
   getAudioInfo: (filePath: string) => Promise<AudioInfo>;
   mergeAudioTracks: (config: unknown) => Promise<MergeResult>;
+  cancelMerge: () => Promise<CancelResult>;
 
-  onMergeProgress: (callback: (progress: ProgressData) => void) => void;
+  onMergeProgress: (callback: (progress: ProgressData) => void) => () => void;
   removeMergeProgressListener: () => void;
 }
 

@@ -34,6 +34,7 @@ export function useAudioQueue() {
   });
   const [mergeProgress, setMergeProgress] = useState({ percent: 0, message: '' });
   const [isMerging, setIsMerging] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const addFiles = useCallback((newFiles) => {
     setFiles((prev) => {
@@ -79,6 +80,7 @@ export function useAudioQueue() {
     if (tracks.length === 0 || !outputConfig.outputPath || isMerging) return;
 
     setIsMerging(true);
+    setIsCancelling(false);
     setMergeProgress({ percent: 0, message: '初始化...' });
 
     try {
@@ -106,15 +108,36 @@ export function useAudioQueue() {
 
       if (result && result.success) {
         setMergeProgress({ percent: 100, message: `完成！文件已保存: ${result.output_path}` });
+      } else if (result && result.cancelled) {
+        setMergeProgress({ percent: 0, message: '任务已取消', cancelled: true });
       } else {
         setMergeProgress({ percent: 0, message: `错误: ${result?.error || '未知错误'}` });
       }
     } catch (error) {
-      setMergeProgress({ percent: 0, message: `错误: ${error.message}` });
+      if (error && error.cancelled) {
+        setMergeProgress({ percent: 0, message: '任务已取消', cancelled: true });
+      } else {
+        setMergeProgress({ percent: 0, message: `错误: ${error.message}` });
+      }
     } finally {
-      setTimeout(() => setIsMerging(false), 1000);
+      setIsMerging(false);
+      setIsCancelling(false);
     }
   }, [tracks, outputConfig, isMerging]);
+
+  const cancelMerge = useCallback(async () => {
+    if (!isMerging || isCancelling) return;
+    if (!window.electronAPI || !window.electronAPI.cancelMerge) return;
+
+    setIsCancelling(true);
+    setMergeProgress((prev) => ({ ...prev, message: '正在终止后台进程...' }));
+
+    try {
+      await window.electronAPI.cancelMerge();
+    } catch (_e) {
+      setIsCancelling(false);
+    }
+  }, [isMerging, isCancelling]);
 
   return {
     files,
@@ -122,6 +145,7 @@ export function useAudioQueue() {
     outputConfig,
     mergeProgress,
     isMerging,
+    isCancelling,
     addFiles,
     removeFile,
     addTrack,
@@ -130,6 +154,7 @@ export function useAudioQueue() {
     moveTrack,
     updateOutputConfig,
     startMerge,
+    cancelMerge,
     setMergeProgress
   };
 }

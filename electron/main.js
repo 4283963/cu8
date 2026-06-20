@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { registerFileHandlers } = require('./ipc/files');
-const { registerAudioHandlers } = require('./ipc/audio');
+const { registerAudioHandlers, cleanupAllTasks } = require('./ipc/audio');
 
 let mainWindow = null;
 
@@ -48,4 +48,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  cleanupAllTasks();
 });

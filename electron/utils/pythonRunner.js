@@ -1,39 +1,85 @@
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 function getPythonPath() {
   const isDev = process.env.NODE_ENV === 'development';
+  const devPath = path.join(__dirname, '..', '..', 'python');
   const possiblePaths = isDev
-    ? [path.join(__dirname, '..', '..', 'python')]
+    ? [devPath]
     : [
-        path.join(process.resourcesPath, 'python'),
-        path.join(__dirname, '..', '..', 'python')
-      ];
+        process.resourcesPath ? path.join(process.resourcesPath, 'python') : null,
+        devPath
+      ].filter(Boolean);
 
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) return p;
   }
-  return path.join(__dirname, '..', '..', 'python');
+  return devPath;
 }
 
-function runPythonScript(scriptName, args, onProgress) {
-  return new Promise((resolve, reject) => {
+function killProcessTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      exec(`taskkill /PID ${pid} /T /F`, () => {});
+    } else {
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch (_e) {
+        process.kill(pid, 'SIGTERM');
+      }
+      setTimeout(() => {
+        try {
+          process.kill(-pid, 'SIGKILL');
+        } catch (_e) {
+          try { process.kill(pid, 'SIGKILL'); } catch (_e2) { /* already dead */ }
+        }
+      }, 1500);
+    }
+  } catch (_e) {
+  }
+}
+
+class CancelledError extends Error {
+  constructor(message = 'Task cancelled by user') {
+    super(message);
+    this.name = 'CancelledError';
+    this.cancelled = true;
+  }
+}
+
+function runPythonScript(scriptName, args, onProgress, options = {}) {
+  let settled = false;
+  let child = null;
+  let cancelled = false;
+
+  const promise = new Promise((resolve, reject) => {
     const pythonDir = getPythonPath();
     const scriptPath = path.join(pythonDir, scriptName);
 
     const python = process.platform === 'win32' ? 'python' : 'python3';
     const cmdArgs = [scriptPath, ...args];
 
-    const process_ = spawn(python, cmdArgs, {
+    child = spawn(python, cmdArgs, {
       cwd: pythonDir,
-      env: { ...process.env }
+      env: { ...process.env },
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
+    const pid = child.pid;
     let stdoutData = '';
     let stderrData = '';
 
-    process_.stdout.on('data', (data) => {
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+
+    child.stdout.on('data', (data) => {
       const text = data.toString();
       stdoutData += text;
 
@@ -51,13 +97,18 @@ function runPythonScript(scriptName, args, onProgress) {
       }
     });
 
-    process_.stderr.on('data', (data) => {
+    child.stderr.on('data', (data) => {
       stderrData += data.toString();
     });
 
-    process_.on('close', (code) => {
+    child.on('close', (code) => {
+      if (cancelled) {
+        finish(reject, new CancelledError());
+        return;
+      }
+
       if (code !== 0) {
-        reject(new Error(`Python script exited with code ${code}: ${stderrData}`));
+        finish(reject, new Error(`Python script exited with code ${code}: ${stderrData}`));
         return;
       }
 
@@ -71,19 +122,44 @@ function runPythonScript(scriptName, args, onProgress) {
           .pop();
 
         if (lastJsonLine) {
-          resolve(JSON.parse(lastJsonLine));
+          finish(resolve, JSON.parse(lastJsonLine));
         } else {
-          resolve({ success: true });
+          finish(resolve, { success: true });
         }
       } catch (e) {
-        reject(new Error(`Failed to parse Python output: ${e.message}\nRaw output: ${stdoutData}`));
+        finish(reject, new Error(`Failed to parse Python output: ${e.message}\nRaw output: ${stdoutData}`));
       }
     });
 
-    process_.on('error', (err) => {
-      reject(new Error(`Failed to start Python: ${err.message}`));
+    child.on('error', (err) => {
+      if (cancelled) {
+        finish(reject, new CancelledError());
+        return;
+      }
+      finish(reject, new Error(`Failed to start Python: ${err.message}`));
     });
+
+    if (options.signal && typeof options.signal.addEventListener === 'function') {
+      options.signal.addEventListener('abort', () => {
+        cancelled = true;
+        killProcessTree(pid);
+      });
+    }
   });
+
+  const cancel = () => {
+    if (settled || cancelled) return false;
+    cancelled = true;
+    killProcessTree(child ? child.pid : null);
+    return true;
+  };
+
+  return {
+    promise,
+    cancel,
+    get pid() { return child ? child.pid : null; },
+    get cancelled() { return cancelled; }
+  };
 }
 
-module.exports = { runPythonScript, getPythonPath };
+module.exports = { runPythonScript, getPythonPath, killProcessTree, CancelledError };

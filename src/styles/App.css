@@ -483,11 +483,34 @@ html, body {
   overflow: hidden;
 }
 
+.progress-bar.cancelling .progress-fill {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.progress-bar.cancelled .progress-fill {
+  background: var(--accent-warning);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .progress-fill {
   height: 100%;
   background: linear-gradient(90deg, #22c55e, #22d3ee);
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+.export-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.export-actions .btn-large {
+  flex: 1;
 }
 
 .progress-text {

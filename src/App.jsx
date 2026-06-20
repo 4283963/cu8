@@ -12,6 +12,7 @@ export default function App() {
     outputConfig,
     mergeProgress,
     isMerging,
+    isCancelling,
     addFiles,
     removeFile,
     addTrack,
@@ -20,17 +21,18 @@ export default function App() {
     moveTrack,
     updateOutputConfig,
     startMerge,
+    cancelMerge,
     setMergeProgress
   } = useAudioQueue();
 
   useEffect(() => {
-    if (window.electronAPI) {
-      window.electronAPI.onMergeProgress((progress) => {
-        setMergeProgress(progress);
-      });
-    }
+    if (!window.electronAPI || !window.electronAPI.onMergeProgress) return;
+    const unsubscribe = window.electronAPI.onMergeProgress((progress) => {
+      setMergeProgress(progress);
+    });
     return () => {
-      if (window.electronAPI) {
+      unsubscribe && unsubscribe();
+      if (window.electronAPI.removeMergeProgressListener) {
         window.electronAPI.removeMergeProgressListener();
       }
     };
@@ -91,7 +93,9 @@ export default function App() {
             config={outputConfig}
             onConfigChange={updateOutputConfig}
             onStart={startMerge}
+            onCancel={cancelMerge}
             isMerging={isMerging}
+            isCancelling={isCancelling}
             progress={mergeProgress}
           />
         </section>

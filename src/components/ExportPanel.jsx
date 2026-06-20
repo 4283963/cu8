@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ExportPanel({ tracks, config, onConfigChange, onStart, isMerging, progress }) {
+export default function ExportPanel({ tracks, config, onConfigChange, onStart, onCancel, isMerging, isCancelling, progress }) {
   const handleSaveAs = async () => {
     if (!window.electronAPI) return;
     const ext = config.format;
@@ -12,8 +12,10 @@ export default function ExportPanel({ tracks, config, onConfigChange, onStart, i
   };
 
   const canMerge = tracks.length > 0 && config.outputPath && !isMerging;
+  const canCancel = isMerging && !isCancelling;
   const progressPct = progress?.percent ?? 0;
   const progressMsg = progress?.message ?? '';
+  const isCancelled = progress?.cancelled === true;
 
   const totalDuration = tracks.reduce((acc, t) => {
     const d = (t.duration || 0) - ((t.trimStart || 0) + (t.trimEnd || 0)) / 1000;
@@ -112,25 +114,35 @@ export default function ExportPanel({ tracks, config, onConfigChange, onStart, i
 
       {isMerging && (
         <div className="progress-container">
-          <div className="progress-bar">
+          <div className={`progress-bar ${isCancelling ? 'cancelling' : ''} ${isCancelled ? 'cancelled' : ''}`}>
             <div
               className="progress-fill"
-              style={{ width: `${progressPct}%` }}
+              style={{ width: `${isCancelling || isCancelled ? 100 : progressPct}%` }}
             />
           </div>
           <div className="progress-text">
-            {progressMsg || `处理中... ${progressPct.toFixed(0)}%`}
+            {isCancelling ? '⏳ 正在终止后台 Python 进程...' : progressMsg || `处理中... ${progressPct.toFixed(0)}%`}
           </div>
         </div>
       )}
 
-      <button
-        className="btn btn-primary btn-large"
-        onClick={onStart}
-        disabled={!canMerge}
-      >
-        {isMerging ? '🔄 处理中...' : '🚀 开始合并导出'}
-      </button>
+      <div className="export-actions">
+        <button
+          className="btn btn-primary btn-large"
+          onClick={onStart}
+          disabled={!canMerge}
+        >
+          {isMerging ? '🔄 处理中...' : '🚀 开始合并导出'}
+        </button>
+        {canCancel && (
+          <button
+            className="btn btn-danger btn-large"
+            onClick={onCancel}
+          >
+            ⏹ 取消合并
+          </button>
+        )}
+      </div>
     </div>
   );
 }
