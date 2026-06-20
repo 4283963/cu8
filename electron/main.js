@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { registerFileHandlers } = require('./ipc/files');
 const { registerAudioHandlers, cleanupAllTasks } = require('./ipc/audio');
+const { registerFolderWatchHandlers, shutdownFolderWatcher } = require('./ipc/folderWatch');
 
 let mainWindow = null;
 
@@ -36,6 +37,7 @@ app.whenReady().then(() => {
   createWindow();
   registerFileHandlers(ipcMain, dialog);
   registerAudioHandlers(ipcMain, mainWindow);
+  registerFolderWatchHandlers(ipcMain, mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -52,4 +54,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   cleanupAllTasks();
+  shutdownFolderWatcher();
 });

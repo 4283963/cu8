@@ -30,6 +30,14 @@ function registerFileHandlers(ipcMain, dialog) {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle('dialog:selectFolder', async (_event, title = '选择文件夹') => {
+    const result = await dialog.showOpenDialog({
+      title,
+      properties: ['openDirectory']
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
   ipcMain.handle('dialog:saveFile', async (_event, defaultName = 'merged_audio.wav') => {
     const result = await dialog.showSaveDialog({
       defaultPath: defaultName,

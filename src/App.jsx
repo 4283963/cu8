@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAudioQueue } from './hooks/useAudioQueue';
 import FileList from './components/FileList.jsx';
 import TrackList from './components/TrackList.jsx';
 import ExportPanel from './components/ExportPanel.jsx';
+import FolderMonitor from './components/FolderMonitor.jsx';
 import './styles/App.css';
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
     isMerging,
     isCancelling,
     addFiles,
+    addFromWatchedFile,
     removeFile,
     addTrack,
     removeTrack,
@@ -24,6 +26,28 @@ export default function App() {
     cancelMerge,
     setMergeProgress
   } = useAudioQueue();
+
+  const [folderWatchStatus, setFolderWatchStatus] = useState({
+    watched: false,
+    path: null,
+    detectedCount: 0,
+    autoEnqueue: true,
+    recent: []
+  });
+
+  const addFromWatchedRef = useRef(addFromWatchedFile);
+  useEffect(() => {
+    addFromWatchedRef.current = addFromWatchedFile;
+  }, [addFromWatchedFile]);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    if (window.electronAPI.folderWatchStatus) {
+      window.electronAPI.folderWatchStatus().then((s) => {
+        if (s) setFolderWatchStatus(s);
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI || !window.electronAPI.onMergeProgress) return;
@@ -38,6 +62,36 @@ export default function App() {
     };
   }, [setMergeProgress]);
 
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    const api = window.electronAPI;
+    const unsubscribers = [];
+
+    if (api.onWatchedStatusChange) {
+      unsubscribers.push(
+        api.onWatchedStatusChange((status) => {
+          if (status) setFolderWatchStatus(status);
+        })
+      );
+    }
+
+    if (api.onWatchedNewFile) {
+      unsubscribers.push(
+        api.onWatchedNewFile((fileInfo) => {
+          if (fileInfo && addFromWatchedRef.current) {
+            addFromWatchedRef.current(fileInfo);
+          }
+        })
+      );
+    }
+
+    return () => {
+      for (const unsub of unsubscribers) {
+        try { unsub(); } catch (_e) { /* noop */ }
+      }
+    };
+  }, []);
+
   const handleSelectFiles = async () => {
     if (!window.electronAPI) {
       alert('请在 Electron 环境中运行此应用');
@@ -49,6 +103,10 @@ export default function App() {
     }
   };
 
+  const handleFolderStatusChange = useCallback((status) => {
+    if (status) setFolderWatchStatus(status);
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
@@ -57,6 +115,16 @@ export default function App() {
       </header>
 
       <main className="app-main">
+        <section className="panel">
+          <div className="panel-header">
+            <h2>👁️ 文件夹自动监视</h2>
+          </div>
+          <FolderMonitor
+            status={folderWatchStatus}
+            onStatusChange={handleFolderStatusChange}
+          />
+        </section>
+
         <section className="panel">
           <div className="panel-header">
             <h2>📁 音频文件库</h2>

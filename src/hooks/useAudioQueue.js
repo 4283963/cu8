@@ -53,6 +53,33 @@ export function useAudioQueue() {
     setTracks((prev) => [...prev, createTrackFromFile(file)]);
   }, []);
 
+  const addFromWatchedFile = useCallback((watchedFile) => {
+    if (!watchedFile || !watchedFile.path) return { fileAdded: false, trackAdded: false };
+
+    let fileAdded = false;
+    let trackAdded = false;
+
+    setFiles((prev) => {
+      const existingPaths = new Set(prev.map(f => f.path));
+      if (existingPaths.has(watchedFile.path)) {
+        return prev;
+      }
+      fileAdded = true;
+      return [...prev, { ...watchedFile, source: watchedFile.source || 'watch' }];
+    });
+
+    setTracks((prev) => {
+      const existingTrackPaths = new Set(prev.map(t => t.path));
+      if (existingTrackPaths.has(watchedFile.path)) {
+        return prev;
+      }
+      trackAdded = true;
+      return [...prev, createTrackFromFile(watchedFile)];
+    });
+
+    return { fileAdded, trackAdded };
+  }, []);
+
   const removeTrack = useCallback((trackId) => {
     setTracks((prev) => prev.filter(t => t.id !== trackId));
   }, []);
@@ -147,6 +174,7 @@ export function useAudioQueue() {
     isMerging,
     isCancelling,
     addFiles,
+    addFromWatchedFile,
     removeFile,
     addTrack,
     removeTrack,
